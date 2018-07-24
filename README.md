@@ -22,6 +22,17 @@ Or clone the repo:
     $ git clone https://github.com/janfan/counterfactualgp.git
     $ python setup.py install
     
+
+Dev
+------------
+
+Build simulated dataset from Jupyter Notebooks.
+
+To run tests:
+
+    $ py.test
+
+
 Contributing
 ------------
 
