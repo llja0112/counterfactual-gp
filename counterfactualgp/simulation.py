@@ -90,3 +90,35 @@ def treat_sample(y, t, policy, rng, stack=False):
             y_rx, t_rx, treated = policy.treat(y_rx, t_rx, treated, t0, stack)
 
     return y_rx, (t_rx, rx)
+
+
+def truncate_treat_data_set(samples, time, policy, rng, final=False):
+    treated = []
+
+    for y, t in samples:
+        treated.append( truncate_treat_sample(y, t, time, policy, rng, final) )
+
+    return treated
+
+
+def truncate_treat_sample(y, t, time, policy, rng, final=False, stack=False):
+    y_rx = np.array(y)
+    t_rx = np.array(t)
+    treated = np.zeros(len(t), dtype=bool)
+    rx = np.zeros(len(t))
+
+    for i, t0 in enumerate(t):
+        if t0 > time: # only treat before `time`
+            break
+
+        rx[i] = policy.sample_treatment(y_rx[:(i+1)], t_rx[:(i+1)], rng)
+
+        if rx[i] == 1:
+            y_rx, t_rx, treated = policy.treat(y_rx, t_rx, treated, t0, stack)
+
+    # Add a final treatment at `time`.
+    if final:
+        rx[t_rx == time] = 1.0
+        y_rx, t_rx, treated = policy.treat(y_rx, t_rx, treated, time, stack)
+
+    return y_rx, (t_rx, rx)
