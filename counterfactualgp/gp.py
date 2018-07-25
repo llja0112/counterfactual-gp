@@ -5,26 +5,26 @@ from numpy.linalg.linalg import LinAlgError
 from scipy.optimize import minimize
 
 from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
-from counterfactualgp.mean import LinearModel
+from counterfactualgp import mean
 
 
 class GP:
     def __init__(self, degree):
         self.degree = degree
         self.params = {}
-        self.params['mean_coef'] = np.zeros(degree+1)
+        self.params.update(mean.linear_params(degree))
         self.params['ln_cov_y'] = np.zeros(1)
 
     def predict(self, x_star, y, x):
         t_star, rx_star = x_star
-        prior_mean = mean_fn(self.params, self.degree, t_star)
+        prior_mean = mean.linear_predict(self.params, t_star)
         prior_cov = cov_fn(self.params, t_star)
 
         if len(y) == 0:
             return prior_mean, prior_cov
 
         t, rx = x
-        obs_mean = mean_fn(self.params, self.degree, t)
+        obs_mean = mean.linear_predict(self.params, t)
         obs_cov = cov_fn(self.params, t)
 
         cross_cov = cov_fn(self.params, t_star, t)
@@ -41,19 +41,18 @@ class GP:
 
         pack, unpack = packing_funcs(self.params)
 
-        def _obj(w, degree):
+        def obj(w):
             p = unpack(w)
             f = 0.0
 
             for y, x in samples:
-                f -= log_likelihood(p, degree, y, x)
+                f -= log_likelihood(p, y, x)
 
-            f += np.sum(p['mean_coef']**2)            
+            for k,v in p.items():
+                if k.endswith('_F'):
+                    f += np.sum(v**2)            
 
             return f
-
-        from functools import partial
-        obj = partial(_obj, degree = self.degree)
 
         def callback(w):
             print('obj=', obj(w))
@@ -64,18 +63,18 @@ class GP:
         self.params = unpack(solution['x'])
 
     def _initialize(self, samples):
-        m = LinearModel(self.degree)
-        m.fit(samples)
-        self.params['mean_coef'] = m.coef
-    
+        p = mean.linear_fit_params(self.params, samples)
+        self.params.update(p)
 
-def mean_fn(params, degree, t):
-    # np.poly1d can't be optimized
-    #return np.poly1d(params['mean_coef'])(t)
-    sum = 0.0
-    for d in range(degree+1):
-        sum += params['mean_coef'][d] * np.power(t, degree-d) 
-    return sum
+
+def log_likelihood(params, y, x):
+    t, rx = x
+    m = mean.linear_predict(params, t)
+    c = cov_fn(params, t)
+
+    ln_p_y = vec_mvn_logpdf(y, m, c)
+
+    return ln_p_y
 
 
 def cov_fn(params, t1, t2=None, eps=1e-3):
@@ -88,13 +87,3 @@ def cov_fn(params, t1, t2=None, eps=1e-3):
         cov = np.zeros((len(t1), len(t2)))
 
     return cov
-
-
-def log_likelihood(params, degree, y, x):
-    t, rx = x
-    m = mean_fn(params, degree, t)
-    c = cov_fn(params, t)
-
-    ln_p_y = vec_mvn_logpdf(y, m, c)
-
-    return ln_p_y
