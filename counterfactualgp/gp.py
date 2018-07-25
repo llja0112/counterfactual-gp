@@ -40,18 +40,20 @@ class GP:
             self._initialize(samples)
 
         trainable_params = dict([(k,v) for k,v in self.params.items() if not k.endswith('_F')])
+        fixed_params = dict([(k,v) for k,v in self.params.items() if k.endswith('_F')])
         pack, unpack = packing_funcs(trainable_params)
 
         def obj(w):
             p = unpack(w)
+            p.update(fixed_params)
             f = 0.0
 
             for y, x in samples:
                 f -= log_likelihood(p, y, x, mean_fn=self.mean, cov_fn=self.cov)
 
-            for k,v in p.items():
+            for k,_ in trainable_params.items():
                 if k.endswith('_F'):
-                    f += np.sum(v**2)
+                    f += np.sum(p[k]**2)
 
             return f
 
@@ -62,6 +64,7 @@ class GP:
 
         solution = minimize(obj, pack(self.params), jac=grad, method='BFGS', callback=callback)
         self.params = unpack(solution['x'])
+        self.params.update(fixed_params)
 
     def _initialize(self, samples):
         self.params = self.mean(self.params, samples, params_only=True)

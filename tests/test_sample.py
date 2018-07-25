@@ -1,7 +1,7 @@
 import pytest
 import autograd.numpy as np
 from counterfactualgp.mean import linear_mean
-from counterfactualgp.cov import iid_cov
+from counterfactualgp.cov import iid_cov, se_cov
 from counterfactualgp.gp import GP
 
 
@@ -33,7 +33,8 @@ def test_mean_linear(data):
 
 def test_gp(data):
     m = linear_mean(1)
-    gp = GP(m, iid_cov)
+    #gp = GP(m, iid_cov)
+    gp = GP(m, se_cov(a=1.0, l=1.0))
     gp.fit(data['training'], init = False)
     print(gp.params)
     mean_coef_ = np.round(gp.params['linear_mean_coef'], 1).tolist()
@@ -43,5 +44,5 @@ def test_gp(data):
     y, x = data['testing'][0]
     t, rx = x
     yhat, cov_hat = gp.predict((t, rx), y, x)   
-    # 0.6406229347798944
-    assert np.round(np.sum(yhat - y), 2) == 0.64
+    # assert np.round(np.sum(yhat - y), 2) == 0.64
+    assert np.round(np.sum(yhat - y), 2) == 0.01
