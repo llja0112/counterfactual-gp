@@ -16,7 +16,24 @@ class GP:
         self.params['ln_cov_y'] = np.zeros(1)
 
     def predict(self, x_star, y, x):
-        pass
+        t_star, rx_star = x_star
+        prior_mean = mean_fn(self.params, self.degree, t_star)
+        prior_cov = cov_fn(self.params, t_star)
+
+        if len(y) == 0:
+            return prior_mean, prior_cov
+
+        t, rx = x
+        obs_mean = mean_fn(self.params, self.degree, t)
+        obs_cov = cov_fn(self.params, t)
+
+        cross_cov = cov_fn(self.params, t_star, t)
+
+        alpha = np.linalg.solve(obs_cov, cross_cov.T).T
+        mean = prior_mean + np.dot(alpha, y - obs_mean)
+        cov = prior_cov - np.dot(alpha, cross_cov.T)
+
+        return mean, cov
 
     def fit(self, samples, init = True):
         if init:
