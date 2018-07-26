@@ -8,16 +8,22 @@ from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
 
 
 class GP:
-    def __init__(self, mean_fn, cov_fn):
+    def __init__(self, mean_fn, cov_fn, tr_fn=None):
         self.mean = mean_fn
         self.cov = cov_fn
         self.params = {}
         self.params.update(self.mean(params_only=True))
         self.params.update(self.cov(params_only=True))
+        if tr_fn:
+            self.tr = tr_fn
+            self.params.update(self.tr(params_only=True))
+        else:
+            self.tr = lambda *args, **kwargs: 0
 
     def predict(self, x_star, y, x):
         t_star, rx_star = x_star
         prior_mean = self.mean(self.params, t_star)
+        prior_mean += self.tr(self.params, x_star, prior_mean)
         prior_cov = self.cov(self.params, t_star)
 
         if len(y) == 0:
@@ -25,6 +31,7 @@ class GP:
 
         t, rx = x
         obs_mean = self.mean(self.params, t)
+        obs_mean += self.tr(self.params, x, obs_mean)
         obs_cov = self.cov(self.params, t)
 
         cross_cov = self.cov(self.params, t_star, t)
@@ -49,7 +56,7 @@ class GP:
             f = 0.0
 
             for y, x in samples:
-                f -= log_likelihood(p, y, x, mean_fn=self.mean, cov_fn=self.cov)
+                f -= log_likelihood(p, y, x, mean_fn=self.mean, cov_fn=self.cov, tr_fn=self.tr)
 
             for k,_ in trainable_params.items():
                 if k.endswith('_F'):
@@ -70,9 +77,10 @@ class GP:
         self.params = self.mean(self.params, samples, params_only=True)
 
 
-def log_likelihood(params, y, x, mean_fn, cov_fn):
+def log_likelihood(params, y, x, mean_fn, cov_fn, tr_fn):
     t, rx = x
     m = mean_fn(params, t)
+    m += tr_fn(params, x, m)
     c = cov_fn(params, t)
 
     ln_p_y = vec_mvn_logpdf(y, m, c)
