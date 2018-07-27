@@ -1,0 +1,8 @@
+\begin{aligned}
+P(y,z_y,a,z_a|t) &= P(y|t,z_y) P(z_y|t) P(a,z_a|t)\\
+&assume \; P(z_y=1|t)=1,\; a \in \{0,1\}\\
+P(y,z_y,a,z_a|t) &= P(y|t,z_y) P(z_a|t)\\
+&assume \; P(y|t,z_y; \theta_1), P(z_a|t; \theta_2), \theta_1\cap\theta_2=\emptyset\\
+max \; \sum_j^{n_i} logP(y_j,z_{yj},a_j,z_{aj}|t_j) &\Leftrightarrow max \; \sum_j^{n_i} log P(y_j|t_j,z_{yj}) + \; \sum_j^{n_i} log P(z_{aj}|t_j)\\
+&assume \; P(y|t,z_y) = \sum_{z_a} P(y,z_a|t,z_y) = \sum_{z_a} P(y|t,z_y,z_a)P(z_a|t)
+\end{aligned}
