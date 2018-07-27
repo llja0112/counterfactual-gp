@@ -10,7 +10,7 @@ from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
 
 
 class GP:
-    def __init__(self, mean_fn, cov_fn, tr_fn=None, counterfactual=True):
+    def __init__(self, mean_fn, cov_fn, tr_fns=[], ac_fn=None):
         self.mean = mean_fn
         self.cov = cov_fn
 
@@ -18,38 +18,35 @@ class GP:
         self.params.update(self.mean(params_only=True))
         self.params.update(self.cov(params_only=True))
 
-        if tr_fn:
-            self.tr = tr_fn
-            self.params.update(self.tr(params_only=True))
-        else:
-            self.tr = lambda *args, **kwargs: 0
+        if tr_fns:
+            self.tr = tr_fns
+            for tr in self.tr:
+                self.params.update(tr(params_only=True))
+        self.tr = [lambda *args, **kwargs: 0] + self.tr
 
-        if counterfactual:
-            self.cf_param_key = 'action'
-            self.params[self.cf_param_key] = np.zeros(1)
+        if ac_fn:
+            self.action = ac_fn
+            self.params.update(self.action(params_only=True))
         else:
-            self.cf_param_key = 'action_F'
-            self.params[self.cf_param_key] = sys.float_info.max
+            self.action = lambda *args, **kwargs: [1.0]
 
     def predict(self, x_star, y, x):
-        rx_logit = self.params[self.cf_param_key]
-        p_rx = 1.0 / (1.0 + np.exp(-rx_logit)) # [0.5, 1)
+        p_a = self.action(self.params)
         
         l = len(x_star[0])
         m = np.zeros(l)
         c = np.zeros([l, l])
-        for _p_rx, tr in zip(p_rx, [True, None]):
+        for _p_a, tr in zip(p_a, self.tr):
             _m, _c = self._predict(x_star, y, x, treatment=tr)
-            m += _p_rx * _m
-            c += _p_rx * _c
+            m += _p_a * _m
+            c = _c # All covariance matrix are the same
 
         return m, c
 
-    def _predict(self, x_star, y, x, treatment=True):
+    def _predict(self, x_star, y, x, treatment):
         t_star, rx_star = x_star
         prior_mean = self.mean(self.params, t_star)
-        if treatment:
-            prior_mean += self.tr(self.params, x_star, prior_mean)
+        prior_mean += treatment(self.params, x_star, prior_mean)
         prior_cov = self.cov(self.params, t_star)
 
         if len(y) == 0:
@@ -57,8 +54,7 @@ class GP:
 
         t, rx = x
         obs_mean = self.mean(self.params, t)
-        if treatment:
-            obs_mean += self.tr(self.params, x, obs_mean)
+        obs_mean += treatment(self.params, x, obs_mean)
         obs_cov = self.cov(self.params, t)
 
         cross_cov = self.cov(self.params, t_star, t)
@@ -82,20 +78,18 @@ class GP:
             p.update(fixed_params)
             f = 0.0
 
-            rx_logit = p[self.cf_param_key]
-            p_rx = 1.0 / (1.0 + np.exp(-rx_logit)) # [0.5, 1)
-            ln_p_rx = np.log(np.array([p_rx, 1 - p_rx]))
+            ln_p_a = np.log(self.action(p)) # individual- and time-invariant
             
             for y, x in samples:
                 # Outcome model
-                fs = [_ln_p_rx + log_likelihood(p, y, x, mean_fn=self.mean, cov_fn=self.cov, tr_fn=tr) 
-                        for _ln_p_rx, tr in zip(ln_p_rx, [self.tr, None])]
-                f -= logsumexp(np.array(fs))
+                mixture = [_ln_p_a + log_likelihood(p, y, x, mean_fn=self.mean, cov_fn=self.cov, tr_fn=tr) 
+                        for _ln_p_a, tr in zip(ln_p_a, self.tr)]
+                f -= logsumexp(np.array(mixture))
 
                 # Action model
-                #_, rx = x
-                #n_rx = np.sum(rx)
-                #f -= np.dot(ln_p_rx, np.array([n_rx, len(rx)-n_rx]))
+                _, rx = x
+                n_rx = [np.sum(rx == i) for i in range(ln_p_a.shape[0])]
+                f -= np.dot(ln_p_a.T, np.array(n_rx))
 
             # Regularizers
             for k,_ in trainable_params.items():
@@ -120,8 +114,7 @@ class GP:
 def log_likelihood(params, y, x, mean_fn, cov_fn, tr_fn):
     t, rx = x
     m = mean_fn(params, t)
-    if tr_fn:
-        m += tr_fn(params, x, m)
+    m += tr_fn(params, x, m)
     c = cov_fn(params, t)
 
     ln_p_y = vec_mvn_logpdf(y, m, c)
