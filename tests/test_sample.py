@@ -37,7 +37,8 @@ def test_gp(data):
     tr = treatment(0.5)
     #gp = GP(m, iid_cov)
     #gp = GP(m, se_cov(a=1.0, l=1.0))
-    gp = GP(m, se_cov(a=1.0, l=1.0), tr)
+    #gp = GP(m, se_cov(a=1.0, l=1.0), tr)
+    gp = GP(m, se_cov(a=1.0, l=1.0), tr, counterfactual=True)
     gp.fit(data['training'], init = False)
     print(gp.params)
     mean_coef_ = np.round(gp.params['linear_mean_coef'], 1).tolist()
@@ -49,4 +50,5 @@ def test_gp(data):
     yhat, cov_hat = gp.predict((t, rx), y, x)   
     # assert np.round(np.sum(yhat - y), 2) == 0.64
     # assert np.round(np.sum(yhat - y), 2) == 0.01
+    # assert np.round(np.sum(yhat - y), 2) == -0.02
     assert np.round(np.sum(yhat - y), 2) == -0.02
