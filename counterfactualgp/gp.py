@@ -1,6 +1,7 @@
 import autograd
 import autograd.numpy as np
 import sys
+import pickle
 
 from autograd.scipy.misc import logsumexp
 from numpy.linalg.linalg import LinAlgError
@@ -10,16 +11,18 @@ from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
 
 
 class GP:
-    def __init__(self, mean_fn, cov_fn, tr_fns=[], ac_fn=None):
-        self.mean = mean_fn
-        self.cov = cov_fn
-
+    def __init__(self, mean_fn=None, cov_fn=None, tr_fns=[], ac_fn=None):
         self.params = {}
-        self.params.update(self.mean(params_only=True))
-        self.params.update(self.cov(params_only=True))
 
+        self.mean = mean_fn
+        if self.mean: self.params.update(self.mean(params_only=True))
+
+        self.cov = cov_fn
+        if self.cov: self.params.update(self.cov(params_only=True))
+
+        self.tr = []
         if tr_fns:
-            self.tr = tr_fns
+            self.tr.extend(tr_fns)
             for tr in self.tr:
                 self.params.update(tr(params_only=True))
         self.tr = [lambda *args, **kwargs: 0] + self.tr
@@ -67,7 +70,7 @@ class GP:
 
     def fit(self, samples, init = True):
         if init:
-            self._initialize(samples)
+            self._initialize_mean(samples)
 
         trainable_params = dict([(k,v) for k,v in self.params.items() if not k.endswith('_F')])
         fixed_params = dict([(k,v) for k,v in self.params.items() if k.endswith('_F')])
@@ -107,8 +110,28 @@ class GP:
         self.params = unpack(solution['x'])
         self.params.update(fixed_params)
 
-    def _initialize(self, samples):
+    def _initialize_mean(self, samples):
         self.params = self.mean(self.params, samples, params_only=True)
+
+    def dump_model(self, f):
+        m = {
+            'params'   : self.params,
+            'mean_fn'  : self.mean,
+            'cov_fn'   : self.cov,
+            'tr_fn'    : self.tr,
+            'ac_fn'    : self.action,
+        }
+        with open(f, 'wb') as fout:
+            pickle.dump(m, fout)
+
+    def load_model(self, f):
+        with open(f, 'rb') as fin:
+            m = pickle.load(fin)
+            self.params = m['params']
+            self.mean = m['mean_fn']
+            self.cov = m['cov_fn']
+            self.tr = m['tr_fn']
+            self.action = m['ac_fn']
 
 
 def log_likelihood(params, y, x, mean_fn, cov_fn, tr_fn):
