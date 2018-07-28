@@ -38,8 +38,9 @@ def sample_trajectory(traj, obs_proc, ln_a, ln_l, noise_scale, rng):
 
 
 class TreatmentPolicy:
-    def __init__(self, history_window, weight, bias, effect_window, effect):
+    def __init__(self, history_window, discount, weight, bias, effect_window, effect):
         self.history_window = history_window
+        self.discount = discount
         self.weight = weight
         self.bias = bias
         self.effect_window = effect_window
@@ -50,7 +51,7 @@ class TreatmentPolicy:
         time_to = t0 - t
         in_window = time_to <= self.history_window # average last y's
         avg = np.mean(y[in_window])
-        prob_rx = sigmoid(self.weight * avg + self.bias)
+        prob_rx = self.discount * sigmoid(self.weight * avg + self.bias)
         return rng.binomial(1, prob_rx)
 
     def treat(self, y, t, treated, t0, stack):

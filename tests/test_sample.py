@@ -21,21 +21,20 @@ def test_pass():
 def test_mean_linear(data):
     m = linear_mean(1)
     mp = m(params_only=True)
+    mp = m(mp, data['training2'], params_only=True)
     print(mp)
-    mp = m(mp, data['training'], params_only=True)
 
-    # [0.10835268957176855, 0.9366460911796043]
-    coef_ = np.round(mp['linear_mean_coef'], 1).tolist()
-    assert coef_[0] == 0.1
-    assert coef_[1] != 0.5 # bias changes after treatment 
+    coef_ = np.round(mp['linear_mean_coef'], 2).tolist()
+    assert coef_[0] == 0.45
+    assert coef_[1] == -0.63 # bias affected the treatment 
 
     yhat = m(mp, np.array([1,2,3]))
-    assert np.round(yhat, 8).tolist() == [1.04499878, 1.15335147, 1.26170416]
+    assert np.round(yhat, 8).tolist() == [-0.17919259, 0.266663, 0.7125186]
  
 
 def test_gp(data):
     m = linear_mean(1)
-    tr = treatment(0.5)
+    tr = treatment(4.0)
     ac = BinaryActionModel()
 
     #gp = GP(m, iid_cov)
@@ -45,13 +44,13 @@ def test_gp(data):
     # gp = GP(m, se_cov(a=1.0, l=1.0), [tr], ac_fn=None)
     gp = GP(m, se_cov(a=1.0, l=1.0), [tr], ac_fn=ac)
 
-    gp.fit(data['training'], init = False)
+    gp.fit(data['training2'], init = False)
     print(gp.params)
-    mean_coef_ = np.round(gp.params['linear_mean_coef'], 1).tolist()
-    assert mean_coef_[0] == 0.1
-    assert mean_coef_[1] != 0.5 # bias changes after treatment 
+    mean_coef_ = np.round(gp.params['linear_mean_coef'], 2).tolist()
+    assert mean_coef_[0] == 0.48
+    assert mean_coef_[1] == -0.20
 
-    y, x = data['testing'][0]
+    y, x = data['testing1'][0]
     t, rx = x
     yhat, cov_hat = gp.predict((t, rx), y, x)   
 
@@ -60,4 +59,4 @@ def test_gp(data):
     # assert np.round(np.sum(yhat - y), 2) == -0.02
     #
     # assert np.round(np.sum(yhat - y), 2) == 0.01
-    assert np.round(np.sum(yhat - y), 2) == -0.01
+    assert np.round(np.sum(yhat - y), 2) == -0.4
