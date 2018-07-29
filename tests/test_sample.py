@@ -2,7 +2,7 @@ import pytest
 import autograd.numpy as np
 from counterfactualgp.mean import linear_mean
 from counterfactualgp.cov import iid_cov, se_cov
-from counterfactualgp.treatment import treatment
+from counterfactualgp.treatment import DummyTreatment, Treatment
 from counterfactualgp.mpp import BinaryActionModel
 from counterfactualgp.gp import GP
 
@@ -30,33 +30,58 @@ def test_mean_linear(data):
 
     yhat = m(mp, np.array([1,2,3]))
     assert np.round(yhat, 8).tolist() == [-0.17919259, 0.266663, 0.7125186]
- 
 
-def test_gp(data):
+
+@pytest.mark.skip(reason="")
+def test_gp_with_dummy_treatment(data):
     m = linear_mean(1)
-    tr = treatment(4.0)
-    ac = BinaryActionModel()
-
-    #gp = GP(m, iid_cov)
-    #gp = GP(m, se_cov(a=1.0, l=1.0))
-    #gp = GP(m, se_cov(a=1.0, l=1.0), tr)
-    #
-    # gp = GP(m, se_cov(a=1.0, l=1.0), [tr], ac_fn=None)
-    gp = GP(m, se_cov(a=1.0, l=1.0), [tr], ac_fn=ac)
+    tr = []
+    tr.append( (1.0, DummyTreatment()) )
+    gp = GP(m, se_cov(a=1.0, l=1.0), tr, ac_fn=None)
 
     gp.fit(data['training2'], init = False)
     print(gp.params)
     mean_coef_ = np.round(gp.params['linear_mean_coef'], 2).tolist()
-    assert mean_coef_[0] == 0.48
-    assert mean_coef_[1] == -0.20
+    assert mean_coef_[0] == 0.45
 
     y, x = data['testing1'][0]
-    t, rx = x
-    yhat, cov_hat = gp.predict((t, rx), y, x)   
+    yhat, cov_hat = gp.predict(x, y, x)   
+    assert np.max(np.abs(yhat - y)) < 2.0 # simulated treatment effect
 
-    # assert np.round(np.sum(yhat - y), 2) == 0.64
-    # assert np.round(np.sum(yhat - y), 2) == 0.01
-    # assert np.round(np.sum(yhat - y), 2) == -0.02
-    #
-    # assert np.round(np.sum(yhat - y), 2) == 0.01
-    assert np.round(np.sum(yhat - y), 2) == -0.4
+
+@pytest.mark.skip(reason="")
+def test_gp_with_treatment(data):
+    m = linear_mean(1)
+    tr = []
+    tr.append( (1.0, Treatment(4.0)) )
+    gp = GP(m, se_cov(a=1.0, l=1.0), tr, ac_fn=None)
+
+    gp.fit(data['training2'], init = False)
+    print(gp.params)
+    assert gp.params['treatment'] != 0.0
+    mean_coef_ = np.round(gp.params['linear_mean_coef'], 2).tolist()
+    assert mean_coef_[0] == 0.49
+
+    y, x = data['testing1'][0]
+    yhat, cov_hat = gp.predict(x, y, x)   
+    assert np.max(np.abs(yhat - y)) < 2.0 # simulated treatment effect
+ 
+
+#@pytest.mark.skip(reason="")
+def test_gp_with_binary_action(data):
+    m = linear_mean(1)
+    tr = []
+    tr.append( (0.0, DummyTreatment()) )
+    tr.append( (1.0, Treatment(4.0)) )
+    ac = BinaryActionModel()
+    gp = GP(m, se_cov(a=1.0, l=1.0), tr, ac_fn=ac)
+
+    gp.fit(data['training2'], init = False)
+    print(gp.params)
+    assert gp.params['treatment'] != 0.0
+    mean_coef_ = np.round(gp.params['linear_mean_coef'], 2).tolist()
+    assert mean_coef_[0] == 0.48
+
+    y, x = data['testing1'][0]
+    yhat, cov_hat = gp.predict(x, y, x)   
+    assert np.max(np.abs(yhat - y)) < 2.0 # simulated treatment effect

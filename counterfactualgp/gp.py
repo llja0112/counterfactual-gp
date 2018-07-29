@@ -20,18 +20,19 @@ class GP:
         self.cov = cov_fn
         if self.cov: self.params.update(self.cov(params_only=True))
 
-        self.tr = []
         if tr_fns:
-            self.tr.extend(tr_fns)
-            for tr in self.tr:
+            for _, tr in tr_fns:
                 self.params.update(tr(params_only=True))
-        self.tr = [lambda *args, **kwargs: 0] + self.tr
+        else:
+            # Dummy treatment
+            tr_fns = [(1.0, lambda *args, **kwargs: 0)]
+        self.tr = [tr for _,tr in tr_fns]
+        self.action = lambda *args, **kwargs: [prob for prob,_ in tr_fns]
 
+        # Use action model to replace fixed probs
         if ac_fn:
             self.action = ac_fn
             self.params.update(self.action(params_only=True))
-        else:
-            self.action = lambda *args, **kwargs: [1.0]
 
     def predict(self, x_star, y, x):
         p_a = self.action(self.params)
