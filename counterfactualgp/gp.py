@@ -112,7 +112,7 @@ class GP:
         self.params.update(fixed_params)
 
     def _initialize_mean(self, samples):
-        self.params = self.mean(self.params, samples, params_only=True)
+        pass
 
     def dump_model(self, f):
         m = {

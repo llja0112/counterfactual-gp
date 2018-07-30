@@ -6,9 +6,11 @@ for the sake of autograd uasge.
 
 import autograd.numpy as np
 
+from counterfactualgp.bsplines import BSplines
 
-def linear_mean(degree):
-    def linear_params(degree):
+
+def Linear(degree):
+    def get_params(degree):
         return {
             'linear_mean_coef': np.zeros(degree+1),
         }
@@ -46,8 +48,36 @@ def linear_mean(degree):
             if samples:
                 return linear_fit_params(params, samples)
             else:
-                return linear_params(degree)
+                return get_params(degree)
         else:
             return linear_predict(*args, **kwargs)
 
+    return func
+
+
+def LinearWithBsplinesBasis(num_bases, degree, xlim=(0,1)):
+    def get_params(num_bases, degree):
+        return {
+            'linear_with_bsplines_basis_mean_coef': np.zeros(num_bases),
+            'linear_with_bsplines_basis_degree_F': np.zeros(1),
+        }
+
+    def predict(basis, params, x):
+        w = params['linear_with_bsplines_basis_mean_coef']
+        _x = basis.design(x)
+        return np.dot(_x, w)
+
+    def func(*args, **kwargs):
+        '''
+        :param params:
+        :param x:
+        :param kwargs:
+        '''
+        if kwargs.get('params_only', None):
+            return get_params(num_bases, degree)
+        else:
+            return predict(basis, *args, **kwargs)
+
+    low, high = xlim
+    basis = BSplines(low, high, num_bases, degree, boundaries='space')
     return func
