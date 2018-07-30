@@ -2,11 +2,12 @@ import numpy as np
 
 
 class Trajectory:
-    def __init__(self, func):
-        self.func = func
+    def __init__(self, w, basis):
+        self.w = np.array(w)
+        self.basis = basis
 
     def value(self, x):
-        return self.func(x)
+        return np.dot(self.basis.design(x), self.w)
 
 
 class ObservationTimes:
