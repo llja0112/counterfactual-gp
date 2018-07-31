@@ -2,7 +2,7 @@ import autograd.numpy as np
 
 
 def iid_cov(*args, **kwargs):
-    def iid_params():
+    def get_params():
         return {
             'ln_cov_y': np.zeros(1),
         }
@@ -19,41 +19,53 @@ def iid_cov(*args, **kwargs):
         return cov
 
     if kwargs.get('params_only', None):
-        return iid_params()
+        return get_params()
     else:
         return iid(*args, **kwargs)
 
 
-def linear_params():
-    return {
-        'ln_cov_y': np.zeros(1),
-        'ln_cov_w': np.zeros(1),
-    }
+def linear_cov(basis=None, eps=1e-3):
+    def get_params():
+        return {
+            'ln_cov_y': np.zeros(1),
+            'ln_cov_w': np.zeros(1),
+        }
 
+    def linear_cov(basis, params, t1, t2=None, eps=1e-3):
+        v_w = np.exp(params['ln_cov_w'])
+        v_y = np.exp(params['ln_cov_y'])
 
-def linear(params, t1, t2=None, eps=1e-3):
-    v_w = np.exp(params['ln_cov_w'])
-    v_y = np.exp(params['ln_cov_y'])
+        if t2 is None:
+            t2 = t1
+            symmetric = True
+        else:
+            symmetric = False
 
-    if t2 is None:
-        t2 = t1
-        symmetric = True
+        if basis:
+            b1 = basis.design(t1)
+            b2 = basis.design(t2)
+            cov = v_w * np.dot(b1, b2.T)
+        else:
+            cov = v_w * np.dot(t1, t2.T)
 
-    else:
-        symmetric = False
+        if symmetric:
+            cov += (v_y + eps) * np.eye(len(t1))
 
-    cov = v_w * np.dot(t1, t2.T)
+        return cov
 
-    if symmetric:
-        cov += (v_y + eps) * np.eye(len(t1))
+    def func(*args, **kwargs):
+        if kwargs.get('params_only', None):
+            return get_params()
+        else:
+            return linear_cov(basis, *args, **kwargs)
 
-    return cov
+    return func
 
 
 def se_cov(a, l):
     '''Squared Exponential Kernel'''
 
-    def se_params(ln_a, ln_l):
+    def get_params(ln_a, ln_l):
         return {
             'ln_cov_a_F': np.array([ln_a]),
             'ln_cov_l_F': np.array([ln_l]),
@@ -78,7 +90,7 @@ def se_cov(a, l):
 
     def func(*args, **kwargs):
         if kwargs.get('params_only', None):
-            return se_params(ln_a, ln_l)
+            return get_params(ln_a, ln_l)
         else:
             return se(*args, **kwargs)
 
