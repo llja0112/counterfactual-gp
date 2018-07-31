@@ -11,11 +11,19 @@ from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
 
 
 class GP:
-    def __init__(self, mean_fn=None, cov_fn=None, tr_fns=[], ac_fn=None):
+    def __init__(self, mean_fn=[], cov_fn=None, tr_fns=[], ac_fn=None):
         self.params = {}
 
         self.mean = mean_fn
-        if self.mean: self.params.update(self.mean(params_only=True))
+        self.n_classes = len(self.mean)
+        for m in self.mean:
+            self.params.update(m(params_only=True))
+        if self.n_classes == 1:
+            self.mixture_param_key = 'classes_prob_logit_F'
+            self.params[self.mixture_param_key] = np.array([1.0])
+        else: # Mixture of GPs
+            self.mixture_param_key = 'classes_prob_logit'
+            self.params[self.mixture_param_key] = np.zeros(self.n_classes)
 
         self.cov = cov_fn
         if self.cov: self.params.update(self.cov(params_only=True))
@@ -36,20 +44,24 @@ class GP:
 
     def predict(self, x_star, y, x):
         p_a = self.action(self.params)
+        logits_mix = self.params[self.mixture_param_key]
+        p_mix = np.exp(logits_mix - logsumexp(logits_mix))
         
         l = len(x_star[0])
         m = np.zeros(l)
         c = np.zeros([l, l])
-        for _p_a, tr in zip(p_a, self.tr):
-            _m, _c = self._predict(x_star, y, x, treatment=tr)
-            m += _p_a * _m
-            c = _c # All covariance matrix are the same
+
+        for mn, _p_mix in zip(self.mean, p_mix):
+            for tr, _p_a in zip(self.tr, p_a):
+                _m, _c = self._predict(x_star, y, x, mean_fn=mn, treatment=tr)
+                m += _p_a * _p_mix * _m
+                c = _c # all covariance matrix are the same
 
         return m, c
 
-    def _predict(self, x_star, y, x, treatment):
+    def _predict(self, x_star, y, x, mean_fn, treatment):
         t_star, rx_star = x_star
-        prior_mean = self.mean(self.params, t_star)
+        prior_mean = mean_fn(self.params, t_star)
         prior_mean += treatment(self.params, x_star, prior_mean)
         prior_cov = self.cov(self.params, t_star)
 
@@ -57,7 +69,7 @@ class GP:
             return prior_mean, prior_cov
 
         t, rx = x
-        obs_mean = self.mean(self.params, t)
+        obs_mean = mean_fn(self.params, t)
         obs_mean += treatment(self.params, x, obs_mean)
         obs_cov = self.cov(self.params, t)
 
@@ -83,11 +95,15 @@ class GP:
             f = 0.0
 
             ln_p_a = np.log(self.action(p)) # individual- and time-invariant
+            logits_mix = p[self.mixture_param_key]
+            ln_p_mix = logits_mix - logsumexp(logits_mix)
             
             for y, x in samples:
                 # Outcome model
-                mixture = [_ln_p_a + log_likelihood(p, y, x, mean_fn=self.mean, cov_fn=self.cov, tr_fn=tr) 
-                        for _ln_p_a, tr in zip(ln_p_a, self.tr)]
+                mixture = []
+                for m, _ln_p_mix in zip(self.mean, ln_p_mix):
+                    for tr, _ln_p_a in zip(self.tr, ln_p_a):
+                        mixture.append(_ln_p_a + _ln_p_mix + log_likelihood(p, y, x, mean_fn=m, cov_fn=self.cov, tr_fn=tr))
                 f -= logsumexp(np.array(mixture))
 
                 # Action model

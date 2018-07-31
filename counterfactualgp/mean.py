@@ -55,15 +55,20 @@ def Linear(degree):
     return func
 
 
-def LinearWithBsplinesBasis(num_bases, degree, xlim=(0,1)):
-    def get_params(num_bases, degree):
-        return {
-            'linear_with_bsplines_basis_mean_coef': np.zeros(num_bases),
-            'linear_with_bsplines_basis_degree_F': np.zeros(1),
-        }
+def LinearWithBsplinesBasis(num_bases, degree, xlim=(0,1), no=0, init=None):
+    def get_params(num_bases, degree, no, init):
+        if init is not None:
+            coef = np.array(init)
+            return {
+                'linear_with_bsplines_basis_mean_coef{}'.format(no): coef,
+            }
+        else:
+            return {
+                'linear_with_bsplines_basis_mean_coef{}'.format(no): np.zeros(num_bases),
+            }
 
     def predict(basis, params, x):
-        w = params['linear_with_bsplines_basis_mean_coef']
+        w = params['linear_with_bsplines_basis_mean_coef{}'.format(no)]
         _x = basis.design(x)
         return np.dot(_x, w)
 
@@ -74,7 +79,7 @@ def LinearWithBsplinesBasis(num_bases, degree, xlim=(0,1)):
         :param kwargs:
         '''
         if kwargs.get('params_only', None):
-            return get_params(num_bases, degree)
+            return get_params(num_bases, degree, no, init)
         else:
             return predict(basis, *args, **kwargs)
 
