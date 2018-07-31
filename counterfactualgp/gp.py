@@ -43,21 +43,34 @@ class GP:
             self.params.update(self.action(params_only=True))
 
     def predict(self, x_star, y, x):
-        p_a = self.action(self.params)
-        logits_mix = self.params[self.mixture_param_key]
-        p_mix = np.exp(logits_mix - logsumexp(logits_mix))
-        
         l = len(x_star[0])
         m = np.zeros(l)
         c = np.zeros([l, l])
 
-        for mn, _p_mix in zip(self.mean, p_mix):
-            for tr, _p_a in zip(self.tr, p_a):
+        ms = []
+        for mn in self.mean:
+            for tr in self.tr:
                 _m, _c = self._predict(x_star, y, x, mean_fn=mn, treatment=tr)
-                m += _p_a * _p_mix * _m
+                ms.append(_m)
                 c = _c # all covariance matrix are the same
 
+        p_am = np.exp(self.class_posterior(y, x))
+        for _m, _p_am  in zip(ms, p_am):
+            m += _p_am * _m
+
         return m, c
+
+    def class_posterior(self, y, x):
+        ln_p_a, ln_p_mix = self.class_prior()
+        mixture =  log_likelihood(self.params, y, x, self.mean, self.cov, self.tr, ln_p_a, ln_p_mix)
+        return mixture - logsumexp(mixture)
+
+    def class_prior(self):
+        ln_p_a = np.log(self.action(self.params)) # individual- and time-invariant
+        logits_mix = self.params[self.mixture_param_key]
+        ln_p_mix = logits_mix - logsumexp(logits_mix)
+
+        return ln_p_a, ln_p_mix
 
     def _predict(self, x_star, y, x, mean_fn, treatment):
         t_star, rx_star = x_star
@@ -94,16 +107,11 @@ class GP:
             p.update(fixed_params)
             f = 0.0
 
-            ln_p_a = np.log(self.action(p)) # individual- and time-invariant
-            logits_mix = p[self.mixture_param_key]
-            ln_p_mix = logits_mix - logsumexp(logits_mix)
+            ln_p_a, ln_p_mix = self.class_prior()
             
             for y, x in samples:
                 # Outcome model
-                mixture = []
-                for m, _ln_p_mix in zip(self.mean, ln_p_mix):
-                    for tr, _ln_p_a in zip(self.tr, ln_p_a):
-                        mixture.append(_ln_p_a + _ln_p_mix + log_likelihood(p, y, x, mean_fn=m, cov_fn=self.cov, tr_fn=tr))
+                mixture =  log_likelihood(p, y, x, self.mean, self.cov, self.tr, ln_p_a, ln_p_mix)
                 f -= logsumexp(np.array(mixture))
 
                 # Action model
@@ -127,9 +135,6 @@ class GP:
         self.params = unpack(solution['x'])
         self.params.update(fixed_params)
 
-    def _initialize_mean(self, samples):
-        pass
-
     def dump_model(self, f):
         m = {
             'params'   : self.params,
@@ -151,7 +156,16 @@ class GP:
             self.action = m['ac_fn']
 
 
-def log_likelihood(params, y, x, mean_fn, cov_fn, tr_fn):
+def log_likelihood(params, y, x, mean_fns, cov_fn, tr_fns, ln_p_a, ln_p_mix):
+    mixture = []
+    for m, _ln_p_mix in zip(mean_fns, ln_p_mix):
+        for tr, _ln_p_a in zip(tr_fns, ln_p_a):
+            mixture.append(_ln_p_a + _ln_p_mix + _log_likelihood(params, y, x, m, cov_fn, tr))
+
+    return mixture
+
+
+def _log_likelihood(params, y, x, mean_fn, cov_fn, tr_fn):
     t, rx = x
     m = mean_fn(params, t)
     m += tr_fn(params, x, m)
