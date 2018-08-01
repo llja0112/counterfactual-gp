@@ -5,6 +5,7 @@ from counterfactualgp.cov import iid_cov, se_cov
 from counterfactualgp.treatment import DummyTreatment, Treatment
 from counterfactualgp.mpp import BinaryActionModel
 from counterfactualgp.gp import GP
+from counterfactualgp.util import decompose_rank1_mat
 
 
 @pytest.fixture
@@ -37,3 +38,12 @@ def test_mean_linear(linear_data):
 
     yhat = m(mp, np.array([1,2,3]))
     assert np.round(yhat, 8).tolist() == [-0.17919259, 0.266663, 0.7125186]
+
+
+def test_decompose_ratios():
+    a = np.array([0.2,0.3,0.5])
+    b = np.array([0.1,0.4,0.5])
+    m = (a[:,None] * b[None,:])
+    _a, _b = decompose_rank1_mat(m)
+    assert np.round(_a, 1).tolist() == a.tolist()
+    assert np.round(_b, 1).tolist() == b.tolist()

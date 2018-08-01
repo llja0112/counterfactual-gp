@@ -8,6 +8,7 @@ from numpy.linalg.linalg import LinAlgError
 from scipy.optimize import minimize
 
 from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
+from counterfactualgp.util import decompose_rank1_mat
 
 
 class GP:
@@ -54,16 +55,22 @@ class GP:
                 ms.append(_m)
                 c = _c # all covariance matrix are the same
 
-        p_am = np.exp(self.class_posterior(y, x))
+        p_am = np.exp(self._class_posterior(y, x))
         for _m, _p_am  in zip(ms, p_am):
             m += _p_am * _m
 
         return m, c
 
-    def class_posterior(self, y, x):
+    def _class_posterior(self, y, x):
         ln_p_a, ln_p_mix = self.class_prior()
         mixture =  log_likelihood(self.params, y, x, self.mean, self.cov, self.tr, ln_p_a, ln_p_mix)
         return mixture - logsumexp(mixture)
+
+    def class_posterior(self, y, x):
+        p_am = np.exp(self._class_posterior(y, x))
+        p_am = p_am.reshape(self.n_classes, -1)
+        p_mix, p_a = decompose_rank1_mat(p_am)
+        return np.log(p_a), np.log(p_mix)
 
     def class_prior(self):
         ln_p_a = np.log(self.action(self.params)) # individual- and time-invariant
