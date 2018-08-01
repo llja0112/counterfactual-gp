@@ -114,7 +114,10 @@ class GP:
             p.update(fixed_params)
             f = 0.0
 
-            ln_p_a, ln_p_mix = self.class_prior()
+            # ln_p_a, ln_p_mix = self.class_prior()
+            ln_p_a = np.log(self.action(p)) # individual- and time-invariant
+            logits_mix = p[self.mixture_param_key]
+            ln_p_mix = logits_mix - logsumexp(logits_mix)
             
             for y, x in samples:
                 # Outcome model
