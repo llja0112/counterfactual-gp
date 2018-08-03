@@ -73,6 +73,7 @@ class GP:
     def class_posterior(self, y, x, exclude_ac=[]):
         '''
         Note: self._class_posterior is not a rank-1 matrix
+        :return: p_a, p_mix
         '''
         include_idx = ~np.in1d(range(len(self.tr)), exclude_ac)
         ln_p_am = self._class_posterior(y, x, exclude_ac)
@@ -109,10 +110,7 @@ class GP:
 
         return mean, cov
 
-    def fit(self, samples, init = True):
-        if init:
-            self._initialize_mean(samples)
-
+    def fit(self, samples, options={}):
         trainable_params = dict([(k,v) for k,v in self.params.items() if not k.endswith('_F')])
         fixed_params = dict([(k,v) for k,v in self.params.items() if k.endswith('_F')])
         pack, unpack = packing_funcs(trainable_params)
@@ -149,7 +147,7 @@ class GP:
 
         grad = autograd.grad(obj)
 
-        solution = minimize(obj, pack(self.params), jac=grad, method='BFGS', callback=callback)
+        solution = minimize(obj, pack(self.params), jac=grad, method='BFGS', callback=callback, options=options)
         self.params = unpack(solution['x'])
         self.params.update(fixed_params)
 
