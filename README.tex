@@ -3,7 +3,7 @@ P(y,z_y,a,z_a|t) &= P(y|t,z_y) P(z_y|t) P(a,z_a|t)\\
 \text{assume } & P(z_y=1|t)=P(z_a=1|t)=1,\\
 &z_a, z_y \in \{0,1\},\\
 &a \in \{0,1,...,k\},\\
-P(y,z_y,a,z_a|t) &= P(y|t) P(a|t) = P(y|t) P(a)\\
-max \; \sum_j^{n_i} logP(y_j,z_{yj},a_j,z_{aj}|t_j) &\Leftrightarrow max \; \sum_j^{n_i} log P(y_j|t_j) + \; \sum_j^{n_i} log P(z_{aj})\\
-\text{where } & P(y|t) = \sum_{a} P(y,a|t) = \sum_{a} P(y|t,a)P(a)
+P(y,z_y,a,z_a|t) &= P(y|t) P(a|t)\\
+max \; \sum_j^{n_i} logP(y_j,z_{yj},a_j,z_{aj}|t_j) &\Leftrightarrow max \; \sum_j^{n_i} log P(y_j|t_j) + \; \sum_j^{n_i} log P(a_j|t_j)\\
+\text{where } & P(y|t) = \sum_{a} P(y,a|t) = \sum_{a} P(y|t,a_)P(a|t)
 \end{aligned}
