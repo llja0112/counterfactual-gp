@@ -8,7 +8,6 @@ from numpy.linalg.linalg import LinAlgError
 from scipy.optimize import minimize
 
 from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
-from counterfactualgp.util import decompose_rank1_mat
 
 
 class GP:
@@ -43,34 +42,43 @@ class GP:
             self.action = ac_fn
             self.params.update(self.action(params_only=True))
 
-    def predict(self, x_star, y, x):
+    def predict(self, x_star, y, x, exclude_ac=[]):
         l = len(x_star[0])
-        m = np.zeros(l)
         c = np.zeros([l, l])
+
+        include_idx = ~np.in1d(range(len(self.tr)), exclude_ac)
+        tr_fns = [tr for b, tr in zip(include_idx, self.tr) if b]
+        ln_p_am = self._class_posterior(y, x, exclude_ac).ravel()
 
         ms = []
         for mn in self.mean:
-            for tr in self.tr:
+            for tr in tr_fns:
                 _m, _c = self._predict(x_star, y, x, mean_fn=mn, treatment=tr)
                 ms.append(_m)
                 c = _c # all covariance matrix are the same
 
-        p_am = np.exp(self._class_posterior(y, x))
-        for _m, _p_am  in zip(ms, p_am):
-            m += _p_am * _m
+        ms = [p*_m for p,_m in zip(np.exp(ln_p_am), ms)]
+        return np.sum(ms, axis=0), c
 
-        return m, c
-
-    def _class_posterior(self, y, x):
+    def _class_posterior(self, y, x, exclude_ac):
         ln_p_a, ln_p_mix = self.class_prior()
-        mixture =  log_likelihood(self.params, y, x, self.mean, self.cov, self.tr, ln_p_a, ln_p_mix)
+
+        include_idx = ~np.in1d(range(len(self.tr)), exclude_ac)
+        ln_p_a = ln_p_a[include_idx]
+        tr_fns = [tr for b, tr in zip(include_idx, self.tr) if b]
+
+        mixture =  log_likelihood(self.params, y, x, self.mean, self.cov, tr_fns, ln_p_a, ln_p_mix)
         return mixture - logsumexp(mixture)
 
-    def class_posterior(self, y, x):
-        p_am = np.exp(self._class_posterior(y, x))
-        p_am = p_am.reshape(self.n_classes, -1)
-        p_mix, p_a = decompose_rank1_mat(p_am)
-        return np.log(p_a), np.log(p_mix)
+    def class_posterior(self, y, x, exclude_ac=[]):
+        '''
+        Note: self._class_posterior is not a rank-1 matrix
+        '''
+        include_idx = ~np.in1d(range(len(self.tr)), exclude_ac)
+        ln_p_am = self._class_posterior(y, x, exclude_ac)
+
+        mat = np.exp(ln_p_am.reshape(self.n_classes, -1))
+        return np.sum(mat, axis=0), np.sum(mat, axis=1)
 
     def class_prior(self):
         ln_p_a = np.log(self.action(self.params)) # individual- and time-invariant
