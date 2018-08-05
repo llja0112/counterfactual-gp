@@ -9,6 +9,9 @@ def action_log_likelihood(rx, ln_p_a, continuous=False):
     In the case of continuous valued treatment,
     we assume P(a|t,z_a=1) = const, thus inproper density.
     '''
+    if ln_p_a.shape[0] == 1:
+        return 0
+
     if continuous:
         na = np.sum(rx > 0.0)
         n_rx = [len(rx)-na, na]
