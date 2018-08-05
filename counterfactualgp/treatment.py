@@ -1,29 +1,34 @@
 import autograd.numpy as np
 
 
-def DummyTreatment():
+def DummyTreatment(continuous=False):
 
-    def get_params():
-        return {}
+    def get_params(continuous):
+        cont = np.ones(1) if continuous else np.zeros(1)
+        return {
+            'continuous_valued_treatment_F': cont,
+        }
 
     def treat(params, x, m, stack=True):
         return 0
 
     def func(*args, **kwargs):
         if kwargs.get('params_only', None):
-            return get_params()
+            return get_params(continuous)
         else:
             return treat(*args, **kwargs)
 
     return func
 
 
-def Treatment(effects_window):
+def Treatment(effects_window, continuous=False):
 
-    def get_params():
+    def get_params(continuous):
+        cont = np.ones(1) if continuous else np.zeros(1)
         return {
             'treatment': np.zeros(1),
             'effects_window_F': np.array([effects_window]),
+            'continuous_valued_treatment_F': cont,
         }
 
     def treat(params, x, m, stack=True):
@@ -39,7 +44,7 @@ def Treatment(effects_window):
         w = params['effects_window_F']
     
         t, rx = x
-        t_rx = t[rx == 1]
+        t_rx = t[rx > 0]
         d = t[:, None] - t_rx[None, :] # (t, t_rx)
         treated = (d > 0) & (d <= w) # w for effects_window
 
@@ -50,7 +55,7 @@ def Treatment(effects_window):
 
     def func(*args, **kwargs):
         if kwargs.get('params_only', None):
-            return get_params()
+            return get_params(continuous)
         else:
             return treat(*args, **kwargs)
 

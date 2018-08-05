@@ -1,6 +1,22 @@
 import autograd.numpy as np
 
 
+def action_log_likelihood(rx, ln_p_a, continuous=False):
+    '''
+    P(a, z_a|t)
+    z_a \in {0,1}
+    a \in {1,...,k} or R
+    In the case of continuous valued treatment,
+    we assume P(a|t,z_a=1) = const, thus inproper density.
+    '''
+    if continuous:
+        na = np.sum(rx > 0.0)
+        n_rx = [len(rx)-na, na]
+    else:
+        n_rx = [np.sum(rx == i) for i in range(ln_p_a.shape[0])]
+    return np.dot(ln_p_a.T, np.array(n_rx))
+
+
 def BinaryActionModel():
     def get_params():
         return {

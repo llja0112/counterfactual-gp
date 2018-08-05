@@ -8,6 +8,7 @@ from numpy.linalg.linalg import LinAlgError
 from scipy.optimize import minimize
 
 from counterfactualgp.autodiff import packing_funcs, vec_mvn_logpdf
+from counterfactualgp.mpp import action_log_likelihood
 
 
 class GP:
@@ -36,6 +37,7 @@ class GP:
             tr_fns = [(1.0, lambda *args, **kwargs: 0)]
         self.tr = [tr for _,tr in tr_fns]
         self.action = lambda *args, **kwargs: [prob for prob,_ in tr_fns]
+        self.tr_cont_flag = self.params['continuous_valued_treatment_F'].tolist() == [1.0]
 
         # Use action model to replace fixed probs
         if ac_fn:
@@ -133,10 +135,8 @@ class GP:
                 f -= logsumexp(np.array(mixture))
 
                 # Action model
-                # TODO: continuous action models
                 _, rx = x
-                n_rx = [np.sum(rx == i) for i in range(ln_p_a.shape[0])]
-                f -= np.dot(ln_p_a.T, np.array(n_rx))
+                f -= action_log_likelihood(rx, ln_p_a, self.tr_cont_flag)
 
             # Regularizers
             for k,_ in trainable_params.items():
