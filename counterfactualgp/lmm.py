@@ -3,6 +3,7 @@ import numpy as np
 import scipy.linalg as la
 
 from scipy.stats import multivariate_normal as mvn
+from scipy.cluster.hierarchy import linkage, cut_tree
 
 
 class LinearMixedModel:
@@ -183,3 +184,20 @@ def mvn_logpdf(x, m, c):
     q = -0.5 * np.dot(x - m, np.linalg.solve(c, x - m))
     z = 0.5 * np.linalg.slogdet(2 * np.pi * c)[1]
     return q - z
+
+
+def cluster_trajectories(data, basis, n_clusters, method='complete'):
+    data = [(y, np.ones(len(x))[:, None], basis.design(x)) for y,(x,_) in data]
+    lmm = learn_lmm(data)
+    
+    beta, Sigma, noise = lmm.param_copy()
+    coef = np.array([lmm.posterior(*x)[0] for x in data])
+    link = linkage(coef, method)
+    clusters = cut_tree(link, n_clusters).ravel()
+
+    cluster_coef = np.ndarray((n_clusters, coef.shape[1]))
+    for k in range(n_clusters):
+        w = coef[clusters == k].mean(axis=0)
+        cluster_coef[k] = w
+    
+    return lmm, cluster_coef

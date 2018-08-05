@@ -46,6 +46,7 @@ class GP:
         l = len(x_star[0])
         c = np.zeros([l, l])
 
+        # exclude actions
         include_idx = ~np.in1d(range(len(self.tr)), exclude_ac)
         tr_fns = [tr for b, tr in zip(include_idx, self.tr) if b]
         ln_p_am = self._class_posterior(y, x, exclude_ac).ravel()
@@ -98,14 +99,15 @@ class GP:
             return prior_mean, prior_cov
 
         t, rx = x
+        y_idx = ~np.isnan(y)
         obs_mean = mean_fn(self.params, t)
         obs_mean += treatment(self.params, x, obs_mean)
-        obs_cov = self.cov(self.params, t)
+        obs_cov = self.cov(self.params, t[y_idx])
 
-        cross_cov = self.cov(self.params, t_star, t)
+        cross_cov = self.cov(self.params, t_star, t[y_idx])
 
         alpha = np.linalg.solve(obs_cov, cross_cov.T).T
-        mean = prior_mean + np.dot(alpha, y - obs_mean)
+        mean = prior_mean + np.dot(alpha, y[y_idx] - obs_mean[y_idx])
         cov = prior_cov - np.dot(alpha, cross_cov.T)
 
         return mean, cov
@@ -124,13 +126,14 @@ class GP:
             ln_p_a = np.log(self.action(p)) # individual- and time-invariant
             logits_mix = p[self.mixture_param_key]
             ln_p_mix = logits_mix - logsumexp(logits_mix)
-            
+
             for y, x in samples:
                 # Outcome model
                 mixture =  log_likelihood(p, y, x, self.mean, self.cov, self.tr, ln_p_a, ln_p_mix)
                 f -= logsumexp(np.array(mixture))
 
                 # Action model
+                # TODO: continuous action models
                 _, rx = x
                 n_rx = [np.sum(rx == i) for i in range(ln_p_a.shape[0])]
                 f -= np.dot(ln_p_a.T, np.array(n_rx))
@@ -183,10 +186,11 @@ def log_likelihood(params, y, x, mean_fns, cov_fn, tr_fns, ln_p_a, ln_p_mix):
 
 def _log_likelihood(params, y, x, mean_fn, cov_fn, tr_fn):
     t, rx = x
+    y_idx = ~np.isnan(y)
     m = mean_fn(params, t)
     m += tr_fn(params, x, m)
-    c = cov_fn(params, t)
+    c = cov_fn(params, t[y_idx])
 
-    ln_p_y = vec_mvn_logpdf(y, m, c)
+    ln_p_y = vec_mvn_logpdf(y[y_idx], m[y_idx], c)
 
     return ln_p_y

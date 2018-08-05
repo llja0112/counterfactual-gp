@@ -6,15 +6,7 @@ def DummyTreatment():
     def get_params():
         return {}
 
-    def treat(params, x, y=None, stack=True):
-        '''
-        This treatment function is only added on to the mean value.
-        Its value may depend on the mean value.
-
-        :param params:
-        :param x: (t, rx)
-        :param y: mean value
-        '''
+    def treat(params, x, m, stack=True):
         return 0
 
     def func(*args, **kwargs):
@@ -34,25 +26,25 @@ def Treatment(effects_window):
             'effects_window_F': np.array([effects_window]),
         }
 
-    def treat(params, x, y=None, stack=True):
+    def treat(params, x, m, stack=True):
         '''
         This treatment function is only added on to the mean value.
         Its value may depend on the mean value.
 
         :param params:
         :param x: (t, rx)
-        :param y: mean value
+        :param m: mean value
         '''
         c = params['treatment']
         w = params['effects_window_F']
     
         t, rx = x
         t_rx = t[rx == 1]
-        d = t[:, None] - t_rx[None, :] # shape (t, t_rx)
+        d = t[:, None] - t_rx[None, :] # (t, t_rx)
         treated = (d > 0) & (d <= w) # w for effects_window
 
         if stack:
-            return c * np.sum(treated, axis=1) # shape (t,)
+            return c * np.sum(treated, axis=1) # (t,)
         else:
             return c * np.any(treated, axis=1).astype(float)
 

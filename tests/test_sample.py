@@ -7,8 +7,9 @@ from counterfactualgp.cov import iid_cov, se_cov, linear_cov
 from counterfactualgp.treatment import DummyTreatment, Treatment
 from counterfactualgp.mpp import BinaryActionModel
 from counterfactualgp.bsplines import BSplines
+from counterfactualgp.lmm import cluster_trajectories
 from counterfactualgp.gp import GP
-from counterfactualgp.util import make_predict_samples, cluster_trajectories
+from counterfactualgp.util import make_predict_samples, make_missed_obs_samples
 
 
 @pytest.fixture
@@ -43,6 +44,7 @@ def test_mean_linear(linear_data):
     assert np.round(yhat, 8).tolist() == [-0.17919259, 0.266663, 0.7125186]
 
 
+#@pytest.mark.skip(reason="")
 def test_lmm(bspline_data):
     low, high = bspline_data['xlim']
     num_bases = 5
@@ -93,9 +95,64 @@ def test_gp(bspline_data):
     _test_gp_prediction(mcgp, bspline_data['testing1'][0:20], truncated_time, [0])
 
 
+#@pytest.mark.skip(reason="")
+def test_sgp(bspline_data):
+    low, high = bspline_data['xlim']
+    num_bases = 5
+    bsplines_degree = 3
+    basis = BSplines(low, high, num_bases, bsplines_degree, boundaries='space')
+
+    n_clusters = 1
+    random_basis = np.random.multivariate_normal(np.zeros(num_bases), 0.1*np.eye(num_bases), n_clusters)
+
+    n_train = bspline_data['n_train']
+    truncated_time = bspline_data['truncated_time']
+
+    m = []
+    for i in range(n_clusters):
+        m.append(LinearWithBsplinesBasis(basis, no=i, init=random_basis[i]))
+    tr = []
+    tr.append( (1.0, Treatment(2.0)) )
+    mcgp = GP(m, linear_cov(basis), tr, ac_fn=None)
+    mcgp.fit(bspline_data['training2'], options={'maxiter':1})
+    print(mcgp.params)
+
+    assert mcgp.params['treatment'].tolist() != [0.0]
+    assert np.round(mcgp.params['classes_prob_logit_F'], 0).tolist() == [1.0]
+    _test_gp_prediction(mcgp, bspline_data['testing1'][0:20], truncated_time)
+
+
+#@pytest.mark.skip(reason="")
+def test_gp_missing_obs(bspline_data):
+    low, high = bspline_data['xlim']
+    num_bases = 5
+    bsplines_degree = 3
+    basis = BSplines(low, high, num_bases, bsplines_degree, boundaries='space')
+
+    n_clusters = 1
+
+    n_train = bspline_data['n_train']
+    truncated_time = bspline_data['truncated_time']
+
+    m = []
+    for i in range(n_clusters):
+        m.append(LinearWithBsplinesBasis(basis, no=i))
+    tr = []
+    tr.append( (1.0, Treatment(2.0)) )
+    gp = GP(m, linear_cov(basis), tr, ac_fn=None)
+
+    # modify dataset
+    gp.fit(make_missed_obs_samples(bspline_data['training2']), options={'maxiter':1})
+    print(gp.params)
+
+    assert np.round(gp.params['linear_with_bsplines_basis_mean_coef0'], 3).tolist() != [0.0] * num_bases
+    assert gp.params['treatment'].tolist() != [0.0]
+    assert np.round(gp.params['classes_prob_logit_F'], 0).tolist() == [1.0]
+    _test_gp_prediction(gp, make_missed_obs_samples(bspline_data['testing1'][0:20]), truncated_time)
+
+
 def _test_gp_params(p):
     assert p['action'].tolist() != [0.0]
-    assert p['treatment'].tolist() != [0.0]
     assert p['treatment'].tolist() != [0.0]
     assert np.all(p['classes_prob_logit'] > -5) # logP < -5, then P<0.01
 
@@ -110,7 +167,7 @@ def _test_gp_prediction(m, data, truncated_time, exclude_ac=[]):
         s += np.sum((yhat - y)[idx] **2) / len(y[idx])
 
         p_a, p_mix = m.class_posterior(_y, _x, exclude_ac)
-        assert len(p_a) == 2 - len(exclude_ac)
+        if exclude_ac: assert len(p_a) == 2 - len(exclude_ac)
         assert np.round(np.sum(p_a), 0) == 1.0
         assert np.round(np.sum(p_mix), 0) == 1.0
     
